@@ -1,0 +1,1 @@
+{"description":"A public, live dashboard of Taskmarket's market data (Tempo + Base), built for a paid Taskmarket bounty.","license":"MIT","name":"taskmarket-live","private":true,"scripts":{"deploy":"python3 scripts/deploy.py","og":"python3 scripts/og-card.py","preview":"python3 -m http.server 4173 --directory public"},"version":"1.0.0"}
