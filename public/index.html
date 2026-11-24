@@ -206,8 +206,8 @@ footer .mono{font-family:var(--mono);font-size:12px}
 
 <script>
 "use strict";
-const WORKER_URL = "__WORKER_URL__"; // replaced at deploy time with the data worker URL
-const REPO_URL = "__REPO_URL__";     // replaced at deploy time with the public repo URL
+const WORKER_URL = ""; // same-origin: data comes from public/_worker.js (/api/data)
+const REPO_URL = "https://github.com/abangdwie/taskmarket-live";
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const fmtInt = (n) => (n == null ? "—" : Math.round(n).toLocaleString("en-US"));
