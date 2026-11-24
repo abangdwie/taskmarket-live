@@ -43,8 +43,14 @@ def call(method, path, data=None, content_type=None):
     if content_type:
         req.add_header("Content-Type", content_type)
     add_surrogate_to_request(req, "custom.cloudflare-direct", allowed_hosts=["api.cloudflare.com"])
-    with urllib.request.build_opener(NoRedirect()).open(req, timeout=120) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(req, timeout=120) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            return json.loads(e.read().decode("utf-8"))
+        except Exception:
+            raise
 
 
 def multipart(parts):
@@ -113,7 +119,8 @@ def deploy_pages(worker_url):
     parts = [("manifest", None, "application/json", json.dumps(manifest).encode())]
     for path, data in files.items():
         ctype = {"index.html": "text/html", "og.png": "image/png",
-                 "favicon.svg": "image/svg+xml", "_headers": "text/plain"}.get(
+                 "favicon.svg": "image/svg+xml", "_headers": "text/plain",
+                 "_worker.js": "application/javascript"}.get(
                      os.path.basename(path), "application/octet-stream")
         parts.append((path, os.path.basename(path), ctype, data))
     body, ctype = multipart(parts)
@@ -127,20 +134,31 @@ def deploy_pages(worker_url):
 
 def verify(url):
     req = urllib.request.Request(url, method="GET")
-    with urllib.request.build_opener(NoRedirect()).open(req, timeout=30) as resp:
-        body = resp.read()
-    print(f"verify {url} -> HTTP {resp.status}, {len(body)} bytes")
-    return resp.status
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(req, timeout=30) as resp:
+            body = resp.read()
+        print(f"verify {url} -> HTTP {resp.status}, {len(body)} bytes")
+        return resp.status
+    except urllib.error.HTTPError as e:
+        print(f"verify {url} -> HTTP {e.code} (may need a moment to propagate)")
+        return e.code
 
 
 def main():
-    worker_url = deploy_worker()
+    # The data endpoint lives in public/_worker.js (Pages advanced mode):
+    # same origin as the site, so __WORKER_URL__ is empty and the page calls
+    # /api/data directly. The standalone worker is no longer deployed.
     ensure_pages_project()
-    pages_url = deploy_pages(worker_url)
-    verify(worker_url + "/api/health")
+    pages_url = deploy_pages("")
+    try:
+        call("DELETE", f"/accounts/{ACCOUNT_ID}/workers/scripts/{WORKER_NAME}")
+        print(f"standalone worker {WORKER_NAME} removed (superseded by _worker.js)")
+    except Exception as e:
+        print(f"note: standalone worker cleanup skipped ({e})")
+    verify(pages_url + "/api/health")
     verify(pages_url)
     print(f"\nLIVE_URL={pages_url}")
-    print(f"WORKER_URL={worker_url}")
+    print(f"DATA_URL={pages_url}/api/data")
     print(f"REPO_URL={REPO_URL}")
     return 0
 
