@@ -128,10 +128,11 @@ footer .mono{font-family:var(--mono);font-size:12px}
   <div id="loadErr" class="err hidden"></div>
 
   <div class="grid" id="statsGrid"></div>
+  <div class="grid" id="chainStrip" style="grid-template-columns:repeat(2,1fr);margin-top:12px"></div>
 
   <section id="view-trends">
     <h2>Trends over <em>time</em></h2>
-    <p class="lede">Daily active agents, tasks posted, rewards put up and rewards paid. Switch range and metric — the chart redraws from the same server data.</p>
+    <p class="lede">Daily active agents, tasks posted, rewards put up and rewards paid — market-wide (the API reports the same series for both chains). Switch range and metric — the chart redraws from the same server data.</p>
     <div class="controls" id="metricCtl">
       <button class="chip on" data-metric="tasksCreated">Tasks posted</button>
       <button class="chip" data-metric="activeAgents">Active agents</button>
@@ -149,7 +150,7 @@ footer .mono{font-family:var(--mono);font-size:12px}
 
   <section id="view-breakdown">
     <h2>What the market <em>is</em></h2>
-    <p class="lede">Tasks by mode and by status, counted from the live API breakdowns. Bounty dominates — but the long tail of pitch, claim and benchmark work is where the quiet money sits.</p>
+    <p class="lede">Tasks by mode and by status, counted from the live API breakdowns — market-wide (the API returns the same breakdowns for both chains). Bounty dominates — but the long tail of pitch, claim and benchmark work is where the quiet money sits.</p>
     <div class="bars">
       <div class="card"><h3>By mode</h3><div id="modeBars"></div></div>
       <div class="card"><h3>By status</h3><div id="statusBars"></div></div>
@@ -158,7 +159,7 @@ footer .mono{font-family:var(--mono);font-size:12px}
 
   <section id="view-heatmap">
     <h2>When the market <em>moves</em></h2>
-    <p class="lede">Activity heatmap: tasks per mode per day over the last 30 days, and per hour of the week over the last 7 days. Darker means busier.</p>
+    <p class="lede">Activity heatmap, market-wide: tasks per mode per day over the last 30 days, and per hour of the week over the last 7 days. Darker means busier.</p>
     <div class="card"><h3>Mode × day · last 30 days</h3><div class="heat" id="heatMode"></div></div>
     <div class="card" style="margin-top:12px"><h3>Hour of week · last 7 days</h3><div class="heat" id="heatHow"></div>
     <div class="legend">Rows are days of the week (Sun–Sat), columns are hours (UTC). Values are task counts.</div></div>
@@ -166,13 +167,13 @@ footer .mono{font-family:var(--mono);font-size:12px}
 
   <section id="view-feed">
     <h2>Live activity <em>feed</em></h2>
-    <p class="lede">The newest events on the market — tasks created and submissions landing — as the API reports them. Refreshes every minute.</p>
+    <p class="lede">The newest events on the market — tasks created and submissions landing — as the API reports them, market-wide. Refreshes every minute.</p>
     <ul class="feed" id="feedList"></ul>
   </section>
 
   <section id="view-posters">
     <h2>Who is <em>posting</em></h2>
-    <p class="lede">Distinct task posters per week, computed from the task list — addresses only, no guessed names. Concentration matters: a market where five wallets post everything behaves differently from one where hundreds do.</p>
+    <p class="lede">Distinct task posters per week, computed from the task list — addresses only, no guessed names. Use the chain switch at the top for Tempo, Base, or the union of both (a wallet posting on both chains counts once). Concentration matters: a market where five wallets post everything behaves differently from one where hundreds do.</p>
     <div class="grid" style="margin-top:0" id="posterStats"></div>
     <div class="card" style="margin-top:12px"><h3>Top posters · last 7 days</h3>
       <table><thead><tr><th>Poster (address)</th><th>Tasks</th><th>Share</th></tr></thead><tbody id="posterTable"></tbody></table>
@@ -194,7 +195,7 @@ footer .mono{font-family:var(--mono);font-size:12px}
   <section id="view-methods" class="methods">
     <h2>Methods &amp; <em>sources</em></h2>
     <p>All numbers come from the public Taskmarket API at <code>https://api.taskmarket.dev</code> — no key, no login. The page never calls that API from the browser (it blocks cross-origin requests): a server worker fetches it, caches the combined result for 10 minutes, and this page reads the worker. Refresh: at least hourly (in practice every 10 minutes). Cache: 600 seconds. “Data as of” is the moment the worker last fetched.</p>
-    <p>Endpoints used: <code>/api/market/stats</code> · <code>/api/stats/breakdowns</code> · <code>/api/stats/platform-time-series</code> · <code>/api/stats/activity-heatmap</code> · <code>/api/stats/activity-feed</code> · <code>/api/tasks</code> — each with <code>chainId=4217</code> (Tempo) and <code>chainId=8453</code> (Base). Rewards are in OUSD (1 OUSD = 1,000,000 base units). Distinct posters per week are counted from the newest-first task list until tasks older than 7 days. No wallet connection, no analytics, no personal data collected.</p>
+    <p>Endpoints used: <code>/api/market/stats</code> · <code>/api/stats/breakdowns</code> · <code>/api/stats/platform-time-series</code> · <code>/api/stats/activity-heatmap</code> · <code>/api/stats/activity-feed</code> · <code>/api/tasks</code> — each with <code>chainId=4217</code> (Tempo) and <code>chainId=8453</code> (Base) where it matters. Verified 25 Nov 2026: breakdowns, time-series, heatmaps and the activity feed are market-wide — the API returns identical values for both chainIds — so they are fetched once and shown once, never summed. What genuinely differs per chain is paid workers / active wallets (in <code>/api/market/stats</code>) and the task list itself (distinct posters per week are counted per chain and as a union). Hour-of-week rows are weekdays labelled Sun–Sat (row 0 = Sunday, the API's numbering). Rewards are OUSD (1 OUSD = 1,000,000 base units). No wallet connection, no analytics, no personal data collected.</p>
     <p>Source code (MIT): <a id="repoLink" href="#">GitHub repository</a> · one-command deploy: <code>npm run deploy</code> (needs <code>CLOUDFLARE_API_TOKEN</code> + <code>CLOUDFLARE_ACCOUNT_ID</code>).</p>
   </section>
 
@@ -226,50 +227,48 @@ let DATA = null, CHAIN = "both", METRIC = "tasksCreated", RANGE = 7;
 
 function scope() {
   if (!DATA) return null;
-  if (CHAIN === "4217") return { t: DATA.chains.tempo, b: null };
-  if (CHAIN === "8453") return { t: null, b: DATA.chains.base };
-  return { t: DATA.chains.tempo, b: DATA.chains.base };
+  return { g: DATA.global, t: DATA.chains.tempo, b: DATA.chains.base };
+}
+function postersScope() {
+  if (!DATA) return null;
+  if (CHAIN === "4217") return DATA.chains.tempo.postersWeek;
+  if (CHAIN === "8453") return DATA.chains.base.postersWeek;
+  return DATA.postersCombined;
 }
 function sumSeries(key) {
-  const s = scope(); if (!s) return [];
-  const rows = {};
-  for (const c of [s.t, s.b]) {
-    if (!c) continue;
-    for (const r of c.series90 || []) {
-      rows[r.bucket] = (rows[r.bucket] || 0) + (+r[key] || 0);
-      if (key === "rewardVolume" || key === "paidVolume") rows[r.bucket] = rows[r.bucket]; // units already
-    }
-  }
-  return Object.keys(rows).sort().map((d) => ({ bucket: d, v: rows[d] }));
-}
-function sumField(getter) {
-  const s = scope(); let out = 0;
-  for (const c of [s.t, s.b]) if (c) out += getter(c) || 0;
-  return out;
+  // The API reports the time-series market-wide (identical for both chains),
+  // so it is used once — never summed across chains.
+  if (!DATA) return [];
+  return (DATA.global.series90 || []).map((r) => ({ bucket: r.bucket, v: +r[key] || 0 }));
 }
 
 function renderStats() {
   const s = scope(); if (!s) return;
-  const t = s.t, b = s.b;
-  const open = sumField((c) => c.stats.openTasks);
-  const agents7 = Math.max(...[t, b].filter(Boolean).map((c) => c.stats.activeAgents7d));
+  // Market stats are (almost) identical per chain — open tasks and active
+  // agents are market-wide values, shown once. Only paid workers / active
+  // wallets differ per chain (shown in the strip below).
+  const st = s.t.stats;
+  const open = st.openTasks;
+  const agents7 = st.activeAgents7d;
   const series = sumSeries("tasksCreated");
   const last30 = series.slice(-30);
   const posted30 = last30.reduce((a, r) => a + r.v, 0);
   const paid30 = sumSeries("paidVolume").slice(-30).reduce((a, r) => a + r.v, 0) / 1e6;
   const putUp30 = sumSeries("rewardVolume").slice(-30).reduce((a, r) => a + r.v, 0) / 1e6;
-  const done30 = sumSeries("completedTasks").slice(-30).reduce((a, r) => a + r.v, 0);
-  const posters = (t ? t.postersWeek.distinct : 0) + (b ? b.postersWeek.distinct : 0);
+  const posters = postersScope().distinct;
   const cards = [
-    ["Open tasks", fmtInt(open), "right now, both chains" ],
-    ["Active agents · 7d", fmtInt(agents7), "agents with activity"],
+    ["Open tasks", fmtInt(open), "right now · market-wide"],
+    ["Active agents · 7d", fmtInt(agents7), "agents with activity · market-wide"],
     ["Tasks posted · 30d", fmtInt(posted30), "new tasks in 30 days"],
     ["Rewards put up · 30d", fmtUSD(putUp30), "escrowed by posters"],
     ["Rewards paid · 30d", fmtUSD(paid30), "settled to workers"],
-    ["Distinct posters · 7d", fmtInt(posters), "wallets posting this week"],
+    ["Distinct posters · 7d", fmtInt(posters), CHAIN === "both" ? "unique wallets, both chains" : (CHAIN === "4217" ? "unique wallets · Tempo" : "unique wallets · Base")],
   ];
   $("#statsGrid").innerHTML = cards.map(([h, n, s2]) =>
     `<div class="card"><h3>${h}</h3><div class="num">${n}</div><div class="sub">${s2}</div></div>`).join("");
+  $("#chainStrip").innerHTML =
+    `<div class="card"><h3>Tempo · chain-specific</h3><div class="num" style="font-size:26px">${fmtInt(s.t.stats.paidWorkers)} <small>paid workers</small></div><div class="sub">${fmtInt(s.t.stats.activeWallets)} active wallets · ${fmtInt(s.t.stats.registeredWorkers)} registered workers</div></div>` +
+    `<div class="card"><h3>Base · chain-specific</h3><div class="num" style="font-size:26px">${fmtInt(s.b.stats.paidWorkers)} <small>paid workers</small></div><div class="sub">${fmtInt(s.b.stats.activeWallets)} active wallets · ${fmtInt(s.b.stats.registeredWorkers)} registered workers</div></div>`;
 }
 
 function drawChart() {
@@ -311,18 +310,17 @@ function barList(el, entries, money) {
 }
 function renderBreakdown() {
   const s = scope(); if (!s) return;
+  // Breakdowns are market-wide (identical per chain) — shown once.
   const modes = {}, stats = {};
-  for (const c of [s.t, s.b]) {
-    if (!c) continue;
-    for (const m of c.breakdowns.mode || []) modes[m.mode] = (modes[m.mode] || 0) + m.count;
-    for (const m of c.breakdowns.status || []) stats[m.status] = (stats[m.status] || 0) + m.count;
-  }
+  for (const m of s.g.breakdowns.mode || []) modes[m.mode] = (modes[m.mode] || 0) + m.count;
+  for (const m of s.g.breakdowns.status || []) stats[m.status] = (stats[m.status] || 0) + m.count;
   barList($("#modeBars"), Object.entries(modes).sort((a, b) => b[1] - a[1]));
   barList($("#statusBars"), Object.entries(stats).sort((a, b) => b[1] - a[1]));
 }
 
 function renderHeat() {
   const s = scope(); if (!s) return;
+  // Heatmaps are market-wide (identical per chain) — shown once.
   const mk = (heat, labelFn) => {
     if (!heat) return "<p class='lede'>No data.</p>";
     const cols = heat.colKeys || [];
@@ -341,35 +339,15 @@ function renderHeat() {
     }
     return html;
   };
-  const merge = (get) => {
-    const out = { rowKeys: [], colKeys: [], cells: [] };
-    const seen = new Set();
-    for (const c of [s.t, s.b]) {
-      if (!c) continue;
-      const h = get(c); if (!h) continue;
-      for (const r of h.rowKeys || []) if (!out.rowKeys.includes(r)) out.rowKeys.push(r);
-      for (const col of h.colKeys || []) if (!out.colKeys.includes(col)) out.colKeys.push(col);
-      for (const cell of h.cells || []) {
-        const k = cell.row + "|" + cell.col;
-        const ex = out.cells.find((x) => x.row === cell.row && x.col === cell.col);
-        if (ex) ex.count += cell.count; else out.cells.push({ ...cell });
-      }
-    }
-    out.colKeys.sort();
-    return out;
-  };
-  $("#heatMode").innerHTML = mk(merge((c) => c.heatMode), (r) => r);
+  $("#heatMode").innerHTML = mk(s.g.heatMode, (r) => r);
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  $("#heatHow").innerHTML = mk(merge((c) => c.heatHow), (r) => (DOW[+r] || r) + " (UTC)");
+  $("#heatHow").innerHTML = mk(s.g.heatHow, (r) => (DOW[+r] || r) + " (UTC)");
 }
 
 function renderFeed() {
   const s = scope(); if (!s) return;
-  const items = [];
-  for (const c of [s.t, s.b]) {
-    if (!c) continue;
-    for (const it of c.feed || []) items.push({ ...it, chain: c.chainId === 4217 ? "Tempo" : "Base" });
-  }
+  // The activity feed is market-wide (identical per chain) — shown once.
+  const items = (s.g.feed || []).map((it) => ({ ...it, chain: "Market-wide" }));
   items.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   $("#feedList").innerHTML = items.slice(0, 30).map((it) =>
     `<li><span class="t">${relTime(it.timestamp)}</span><span class="tag">${it.type === "task_created" ? "new task" : "submitted"}</span>
@@ -380,13 +358,10 @@ function renderFeed() {
 
 function renderPosters() {
   const s = scope(); if (!s) return;
-  const tops = [];
-  for (const c of [s.t, s.b]) if (c) tops.push(...c.postersWeek.top.map((p) => ({ ...p, chain: c.chainId === 4217 ? "Tempo" : "Base" })));
-  const byAddr = {};
-  for (const p of tops) { byAddr[p.address] = byAddr[p.address] || { address: p.address, count: 0, displayName: p.displayName }; byAddr[p.address].count += p.count; }
-  const merged = Object.values(byAddr).sort((a, b) => b.count - a.count).slice(0, 10);
-  const distinct = (s.t ? s.t.postersWeek.distinct : 0) + (s.b ? s.b.postersWeek.distinct : 0);
-  const counted = (s.t ? s.t.postersWeek.tasksCounted : 0) + (s.b ? s.b.postersWeek.tasksCounted : 0);
+  const pw = postersScope();
+  const merged = pw.top.slice(0, 10);
+  const distinct = pw.distinct;
+  const counted = pw.tasksCounted;
   const top5 = merged.slice(0, 5).reduce((a, p) => a + p.count, 0);
   $("#posterStats").innerHTML = [
     ["Distinct posters · 7d", fmtInt(distinct), "unique wallets posting"],
@@ -400,7 +375,7 @@ function renderPosters() {
 function renderInsights() {
   const s = scope(); if (!s) return;
   const stats = {};
-  for (const c of [s.t, s.b]) { if (!c) continue; for (const m of c.breakdowns.status || []) stats[m.status] = (stats[m.status] || 0) + m.count; }
+  for (const m of s.g.breakdowns.status || []) stats[m.status] = (stats[m.status] || 0) + m.count;
   const total = Object.values(stats).reduce((a, v) => a + v, 0);
   const dead = ((stats.expired || 0) + (stats.cancelled || 0));
   const deadPct = total ? Math.round((dead / total) * 100) : 0;
@@ -410,7 +385,7 @@ function renderInsights() {
   const prev7 = series.slice(-14, -7).reduce((a, r) => a + r.v, 0);
   const growth = prev7 ? Math.round(((last7 - prev7) / prev7) * 100) : 0;
   const modes = {};
-  for (const c of [s.t, s.b]) { if (!c) continue; for (const m of c.breakdowns.mode || []) modes[m.mode] = (modes[m.mode] || 0) + m.count; }
+  for (const m of s.g.breakdowns.mode || []) modes[m.mode] = (modes[m.mode] || 0) + m.count;
   const topMode = Object.entries(modes).sort((a, b) => b[1] - a[1])[0];
   const topModeShare = topMode && total ? Math.round((topMode[1] / Object.values(modes).reduce((a, v) => a + v, 0)) * 100) : 0;
   const callouts = [
