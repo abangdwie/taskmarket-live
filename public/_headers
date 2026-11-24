@@ -1,7 +1,5 @@
-/*
- * Cache headers for the static site. The page data is fetched from the worker
- * (cached 600s server-side); the HTML itself is cheap to revalidate.
- */
+# Cache headers for the static site. Page data comes from the worker
+# (cached 600s server-side); the HTML itself is cheap to revalidate.
 /index.html
   Cache-Control: public, max-age=60
 /og.png
