@@ -16,10 +16,11 @@ official Taskmarket product.
 The Taskmarket API (`https://api.taskmarket.dev`) does not allow browser
 requests from other websites, so the data is fetched **server-side**:
 
-- `worker/data-worker.mjs` — a Cloudflare Worker that fetches the six public
-  endpoints for both chains, combines them (including distinct posters per
-  week, computed from the paginated task list), and caches the result for
-  600 seconds in the edge cache. No key, no login, no wallet, no tracking.
+- `public/_worker.js` — a Cloudflare Pages worker (advanced mode) that fetches
+  the six public endpoints for both chains, combines them (including distinct
+  posters per week, computed from the paginated task list), and caches the
+  result for 600 seconds in the edge cache. Same origin as the site, so the
+  page reads `/api/data` directly. No key, no login, no wallet, no tracking.
 - `public/index.html` — a dependency-free single-page dashboard. It reads
   `/api/data` from the worker, renders headline stats, a canvas trend chart,
   mode/status breakdowns, a mode×day heatmap, an hour-of-week heatmap, a
@@ -38,9 +39,9 @@ npm run deploy
 ```
 
 Needs `CLOUDFLARE_API_TOKEN` (Pages + Workers write) and
-`CLOUDFLARE_ACCOUNT_ID` in the environment. The script deploys the worker,
-creates the Pages project if needed, uploads `public/` (injecting the live
-worker URL and this repo URL into `index.html`), and verifies both endpoints.
+`CLOUDFLARE_ACCOUNT_ID` in the environment. The script creates the Pages
+project if needed, uploads `public/` (injecting this repo URL into
+`index.html`), and verifies both the site and the data endpoint.
 
 Preview locally (uses the live worker once deployed):
 
