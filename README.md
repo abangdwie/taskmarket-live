@@ -38,10 +38,12 @@ accent, Instrument Serif headlines, Inter Tight body).
 npm run deploy
 ```
 
-Needs `CLOUDFLARE_API_TOKEN` (Pages + Workers write) and
-`CLOUDFLARE_ACCOUNT_ID` in the environment. The script creates the Pages
-project if needed, uploads `public/` (injecting this repo URL into
-`index.html`), and verifies both the site and the data endpoint.
+Needs `CLOUDFLARE_API_TOKEN` (Pages write) and `CLOUDFLARE_ACCOUNT_ID` in
+the environment — on this machine the token comes from the
+custom.cloudflare-direct connection (Secure Vault). The script runs
+`wrangler pages deploy public` (the Cloudflare direct-upload API silently
+dropped files in Nov 2026, so wrangler is the deploy path), then verifies the
+site and the data endpoint. Wrangler is fetched via npx, no global install.
 
 Preview locally (uses the live worker once deployed):
 
