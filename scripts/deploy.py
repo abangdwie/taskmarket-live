@@ -1,36 +1,33 @@
 #!/usr/bin/env python3
-"""One-command deploy for taskmarket-live (Cloudflare Pages + Worker).
+"""One-command deploy for taskmarket-live (Cloudflare Pages + _worker.js).
 
-Usage:  python3 scripts/deploy.py [--repo-url https://github.com/abangdwie/taskmarket-live]
+Usage:  python3 scripts/deploy.py
 Auth:   token comes from the custom.cloudflare-direct connection (Secure Vault
-        surrogate, same pattern as deploy-pages.py). No token in this file.
-        CLOUDFLARE_ACCOUNT_ID defaults to the account used by that connection.
-Steps:  1. deploy the data worker (server-side API fetch + 600s cache)
-        2. create the Pages project if missing
-        3. upload public/ (index.html gets __WORKER_URL__ / __REPO_URL__ replaced)
-        4. print the live URLs and verify both endpoints
+        surrogate). The script passes it to wrangler as CLOUDFLARE_API_TOKEN;
+        no token is stored in this file.
+Steps:  1. `wrangler pages deploy public` (uploads the static site + the
+           Pages worker in public/_worker.js, which serves /api/data)
+        2. verify the live site, /api/health and /api/data
+        3. print the live URLs
+Note: the Cloudflare direct-upload API was tried first (Nov 2026) and silently
+dropped every file (deployments reported success but served 404); wrangler is
+the reliable path — do not switch back without re-verifying a live file.
 """
-import hashlib
 import json
 import os
+import subprocess
 import sys
 import urllib.request
-import uuid
 
 sys.path.insert(0, "/opt/muse/skills/custom-connector-setup/bin")
-from dynamic_credentials import add_surrogate_to_request
+from dynamic_credentials import dynamic_credential_entry
 
 ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "b15d3ea349d6597d81ef1b0bd4d08032")
 PROJECT = "taskmarket-live"
-WORKER_NAME = "taskmarket-live-data"
+REPO_URL = "https://github.com/abangdwie/taskmarket-live"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-PUBLIC = os.path.join(ROOT, "public")
-WORKER_FILE = os.path.join(ROOT, "worker", "data-worker.mjs")
-REPO_URL = "https://github.com/abangdwie/taskmarket-live"
-if "--repo-url" in sys.argv:
-    REPO_URL = sys.argv[sys.argv.index("--repo-url") + 1]
-API = "https://api.cloudflare.com/client/v4"
+LIVE_URL = f"https://{PROJECT}.pages.dev"
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -38,127 +35,37 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise RuntimeError("redirect refused, verify the endpoint")
 
 
-def call(method, path, data=None, content_type=None):
-    req = urllib.request.Request(API + path, data=data, method=method)
-    if content_type:
-        req.add_header("Content-Type", content_type)
-    add_surrogate_to_request(req, "custom.cloudflare-direct", allowed_hosts=["api.cloudflare.com"])
-    try:
-        with urllib.request.build_opener(NoRedirect()).open(req, timeout=120) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        try:
-            return json.loads(e.read().decode("utf-8"))
-        except Exception:
-            raise
-
-
-def multipart(parts):
-    """parts: list of (name, filename_or_None, content_type, bytes)."""
-    boundary = "----cfdeploy" + uuid.uuid4().hex
-    body = b""
-    for name, filename, ctype, data in parts:
-        disp = f'Content-Disposition: form-data; name="{name}"'
-        if filename:
-            disp += f'; filename="{filename}"'
-        body += f"--{boundary}\r\n{disp}\r\nContent-Type: {ctype}\r\n\r\n".encode() + data + b"\r\n"
-    body += f"--{boundary}--\r\n".encode()
-    return body, f"multipart/form-data; boundary={boundary}"
-
-
-def deploy_worker():
-    sub = call("GET", f"/accounts/{ACCOUNT_ID}/workers/subdomain")
-    if not sub.get("success"):
-        raise SystemExit("subdomain lookup failed: " + json.dumps(sub)[:500])
-    subdomain = sub["result"]["subdomain"]
-    with open(WORKER_FILE, "rb") as f:
-        script = f.read()
-    meta = json.dumps({
-        "main_module": "data-worker.mjs",
-        "compatibility_date": "2024-01-01",
-    }).encode()
-    body, ctype = multipart([
-        ("metadata", None, "application/json", meta),
-        ("data-worker.mjs", "data-worker.mjs", "application/javascript+module", script),
-    ])
-    res = call("PUT", f"/accounts/{ACCOUNT_ID}/workers/scripts/{WORKER_NAME}", body, ctype)
-    if not res.get("success"):
-        raise SystemExit("worker deploy failed: " + json.dumps(res)[:800])
-    url = f"https://{WORKER_NAME}.{subdomain}.workers.dev"
-    print(f"worker live: {url}")
-    return url
-
-
-def ensure_pages_project():
-    res = call("GET", f"/accounts/{ACCOUNT_ID}/pages/projects/{PROJECT}")
-    if res.get("success"):
-        print(f"pages project exists: {PROJECT}")
-        return
-    res = call("POST", f"/accounts/{ACCOUNT_ID}/pages/projects",
-               json.dumps({"name": PROJECT, "production_branch": "main"}).encode(),
-               "application/json")
-    if not res.get("success"):
-        raise SystemExit("pages project create failed: " + json.dumps(res)[:800])
-    print(f"pages project created: {PROJECT}")
-
-
-def deploy_pages(worker_url):
-    files = {}
-    for name in sorted(os.listdir(PUBLIC)):
-        p = os.path.join(PUBLIC, name)
-        if not os.path.isfile(p):
-            continue
-        with open(p, "rb") as f:
-            data = f.read()
-        if name == "index.html":
-            data = (data.decode()
-                    .replace("__WORKER_URL__", worker_url)
-                    .replace("__REPO_URL__", REPO_URL).encode())
-        files["/" + name] = data
-    manifest = {k: hashlib.sha256(v).hexdigest() for k, v in files.items()}
-    parts = [("manifest", None, "application/json", json.dumps(manifest).encode())]
-    for path, data in files.items():
-        ctype = {"index.html": "text/html", "og.png": "image/png",
-                 "favicon.svg": "image/svg+xml", "_headers": "text/plain",
-                 "_worker.js": "application/javascript"}.get(
-                     os.path.basename(path), "application/octet-stream")
-        parts.append((path, os.path.basename(path), ctype, data))
-    body, ctype = multipart(parts)
-    res = call("POST", f"/accounts/{ACCOUNT_ID}/pages/projects/{PROJECT}/deployments", body, ctype)
-    if not res.get("success"):
-        raise SystemExit("pages deploy failed: " + json.dumps(res)[:800])
-    d = res["result"]
-    print(f"pages live: {d['url']} (deployment {d['id']}, stage {d['latest_stage']['name']}:{d['latest_stage']['status']})")
-    return d["url"]
-
-
 def verify(url):
     req = urllib.request.Request(url, method="GET")
     try:
-        with urllib.request.build_opener(NoRedirect()).open(req, timeout=30) as resp:
+        with urllib.request.build_opener(NoRedirect()).open(req, timeout=60) as resp:
             body = resp.read()
         print(f"verify {url} -> HTTP {resp.status}, {len(body)} bytes")
-        return resp.status
+        return resp.status, body
     except urllib.error.HTTPError as e:
         print(f"verify {url} -> HTTP {e.code} (may need a moment to propagate)")
-        return e.code
+        return e.code, b""
 
 
 def main():
-    # The data endpoint lives in public/_worker.js (Pages advanced mode):
-    # same origin as the site, so __WORKER_URL__ is empty and the page calls
-    # /api/data directly. The standalone worker is no longer deployed.
-    ensure_pages_project()
-    pages_url = deploy_pages("")
-    try:
-        call("DELETE", f"/accounts/{ACCOUNT_ID}/workers/scripts/{WORKER_NAME}")
-        print(f"standalone worker {WORKER_NAME} removed (superseded by _worker.js)")
-    except Exception as e:
-        print(f"note: standalone worker cleanup skipped ({e})")
-    verify(pages_url + "/api/health")
-    verify(pages_url)
-    print(f"\nLIVE_URL={pages_url}")
-    print(f"DATA_URL={pages_url}/api/data")
+    entry = dynamic_credential_entry("custom.cloudflare-direct", "access_token")
+    env = dict(os.environ)
+    env["CLOUDFLARE_API_TOKEN"] = entry["surrogate"]
+    env["CLOUDFLARE_ACCOUNT_ID"] = ACCOUNT_ID
+    cmd = ["npx", "-y", "wrangler@4", "pages", "deploy", "public",
+           "--project-name", PROJECT, "--commit-dirty=true"]
+    print("running:", " ".join(cmd))
+    r = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=600)
+    sys.stdout.write(r.stdout[-3000:])
+    sys.stderr.write(r.stderr[-2000:])
+    if r.returncode != 0:
+        raise SystemExit(f"wrangler deploy failed (exit {r.returncode})")
+    verify(LIVE_URL + "/api/health")
+    status, body = verify(LIVE_URL)
+    if status != 200:
+        print("WARNING: homepage did not return 200 — check the deployment before submitting")
+    print(f"\nLIVE_URL={LIVE_URL}")
+    print(f"DATA_URL={LIVE_URL}/api/data")
     print(f"REPO_URL={REPO_URL}")
     return 0
 
